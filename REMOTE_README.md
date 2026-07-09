@@ -32,9 +32,9 @@ tail -f run.log
 
 → `notebooks/03_random_lasso_report.html` 생성. **JupyterHub 파일 브라우저에서 열면** 그래프
 (threshold 곡선·분포·PR곡선·계수 산점도) + 표(F1·AUCPR·논문비교)가 다 보인다.
-`N_JOBS=32`는 노트북 §2 설정에 있음(여유 있으면 그 값을 64로).
+`N_JOBS=64`는 노트북 §2 설정에 있음(공유서버 상황 보고 조절).
 
-예상: 4개 전체 ~20분(n_jobs=32). nbconvert가 없으면 `$PY -m pip install --user nbconvert`.
+예상: 4개 전체 ~12분(n_jobs=64). nbconvert가 없으면 `$PY -m pip install --user nbconvert`.
 
 ## 2B. 실행 — 지표만 빠르게 (스크립트, 선택)
 
