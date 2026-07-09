@@ -16,38 +16,44 @@ cd unlv-hilasso-sim
 
 이후 코드가 업데이트되면 `git pull`만 하면 된다(public repo라 인증 불필요).
 
-## 2. 실행 (클러스터에서)
+## 2A. 실행 — 노트북 리포트 (그래프까지 원격에서, 권장)
+
+노트북을 통째로 실행해 **표+그래프가 다 든 HTML 리포트**를 원격에 생성한다.
+결과는 JupyterHub 웹에서 바로 열어보면 되므로 로컬 회수 불필요.
+
+```bash
+cd ~/boseung/unlv-hilasso-sim/notebooks
+PY=/jupyterhub/jupyterhub-venv/bin/python3
+nohup $PY -m nbconvert --to html --execute 03_random_lasso.ipynb \
+  --ExecutePreprocessor.timeout=9000 --ExecutePreprocessor.kernel_name=python3 \
+  --output 03_random_lasso_report > run.log 2>&1 &
+tail -f run.log
+```
+
+→ `notebooks/03_random_lasso_report.html` 생성. **JupyterHub 파일 브라우저에서 열면** 그래프
+(threshold 곡선·분포·PR곡선·계수 산점도) + 표(F1·AUCPR·논문비교)가 다 보인다.
+`N_JOBS=32`는 노트북 §2 설정에 있음(여유 있으면 그 값을 64로).
+
+예상: 4개 전체 ~20분(n_jobs=32). nbconvert가 없으면 `$PY -m pip install --user nbconvert`.
+
+## 2B. 실행 — 지표만 빠르게 (스크립트, 선택)
+
+그래프 없이 숫자만 빠르게 원할 때. CSV+NPZ 저장.
 
 ```bash
 cd ~/boseung/unlv-hilasso-sim
-PY=/jupyterhub/jupyterhub-venv/bin/python3
-
-# III·IV만 (112코어의 이점이 큰 무거운 것)
-nohup $PY run_random_lasso.py --datasets III IV --n_jobs 32 > run.log 2>&1 &
-tail -f run.log          # 진행 확인 (Ctrl-C로 보기만 종료, 작업은 계속)
-
-# 또는 4개 전부
-$PY run_random_lasso.py --n_jobs 32
+$PY run_random_lasso.py --datasets III IV --n_jobs 32
 ```
+옵션: `--n_jobs --reps --L --datasets`. 예상: III ~6분, IV ~9분.
 
-옵션: `--n_jobs`(코어; 공유서버라 기본 32, 여유 있으면 64), `--reps`(반복, 기본 10),
-`--L`(부트스트랩 배수, 기본 30), `--datasets`(I II III IV 또는 이름).
+## 3. 결과 보기
 
-예상 시간(n_jobs=32): III ~6분, IV ~9분. n_jobs=64면 대략 절반.
-
-## 3. 결과 회수 (로컬 Mac 터미널에서 — SSH 경로, 인증 불필요)
-
-결과 CSV·NPZ는 gitignore라 repo에 안 올라간다. SSH로 직접 가져온다:
-
-```bash
-rsync -av bottia1@datax-app-002:~/boseung/unlv-hilasso-sim/results_random_lasso.* \
-  /Users/boseung/Desktop/Lecture/UNLV/project_v2/results/
-```
-
-- `results_random_lasso.csv` — 반복별 지표(F1·AUCPR·RME·RMSE·threshold·n_selected)
-- `results_random_lasso.npz` — 그래프용 배열(beta_hats·thresholds·thr곡선·중요도)
-
-이 두 파일을 로컬로 가져오면 그래프(threshold 곡선·분포·PR곡선·계수 산점도)를 로컬에서 그린다.
+- **2A(리포트)**: JupyterHub 웹 파일 브라우저에서 `03_random_lasso_report.html` 열기 → **원격에서 다 봄**(로컬 회수 불필요). 로컬에도 두고 싶으면 rsync로 회수.
+- **2B(스크립트)**: `results_random_lasso.csv`(지표)·`.npz`(그래프용 배열)를 rsync로 로컬 회수 후 로컬에서 그래프:
+  ```bash
+  rsync -av bottia1@datax-app-002:~/boseung/unlv-hilasso-sim/results_random_lasso.* \
+    /Users/boseung/Desktop/Lecture/UNLV/project_v2/results/
+  ```
 
 ## 주의
 
