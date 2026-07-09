@@ -6,22 +6,20 @@
 
 무거운 계산만 원격에서 하고, 그래프는 로컬에서 결과 파일로 그린다.
 
-## 1. 전송 (로컬 Mac 터미널에서 실행)
+## 1. 클러스터에서 clone (최초 1회)
 
 ```bash
-cd /Users/boseung/Desktop/Lecture/UNLV
-rsync -av --exclude='__pycache__' \
-  project_v2/run_random_lasso.py project_v2/lib \
-  bottia1@datax-app-002:~/boseung/project_v2/
+cd ~/boseung
+git clone https://github.com/boseung2/unlv-hilasso-sim.git
+cd unlv-hilasso-sim
 ```
 
-필요한 것은 `run_random_lasso.py` + `lib/`(generate_data·scoring·random_lasso)뿐.
-solver.py·rpy2·R·manifest 불필요.
+이후 코드가 업데이트되면 `git pull`만 하면 된다(public repo라 인증 불필요).
 
 ## 2. 실행 (클러스터에서)
 
 ```bash
-cd ~/boseung/project_v2
+cd ~/boseung/unlv-hilasso-sim
 PY=/jupyterhub/jupyterhub-venv/bin/python3
 
 # III·IV만 (112코어의 이점이 큰 무거운 것)
@@ -37,10 +35,12 @@ $PY run_random_lasso.py --n_jobs 32
 
 예상 시간(n_jobs=32): III ~6분, IV ~9분. n_jobs=64면 대략 절반.
 
-## 3. 결과 회수 (로컬 Mac 터미널에서)
+## 3. 결과 회수 (로컬 Mac 터미널에서 — SSH 경로, 인증 불필요)
+
+결과 CSV·NPZ는 gitignore라 repo에 안 올라간다. SSH로 직접 가져온다:
 
 ```bash
-rsync -av bottia1@datax-app-002:~/boseung/project_v2/results_random_lasso.* \
+rsync -av bottia1@datax-app-002:~/boseung/unlv-hilasso-sim/results_random_lasso.* \
   /Users/boseung/Desktop/Lecture/UNLV/project_v2/results/
 ```
 
