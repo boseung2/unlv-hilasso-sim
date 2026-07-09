@@ -1,0 +1,91 @@
+{
+  "method": "manifest (배열 미저장, seed로 재생성)",
+  "seeds": {
+    "SEED_BETA": 34,
+    "BASE_SEED": 1000,
+    "note": "반복 r 데이터 seed = BASE_SEED + r; β seed=SEED_BETA(고정)"
+  },
+  "sigma": 3.0,
+  "n_repeat": 10,
+  "datasets": {
+    "Dataset I": {
+      "p": 100,
+      "groups": [
+        3,
+        3,
+        4
+      ],
+      "within": 0.9,
+      "cross": [],
+      "n_tr": 50,
+      "n_val": 10,
+      "n_te": 10,
+      "beta_kind": "fixed"
+    },
+    "Dataset II": {
+      "p": 1000,
+      "groups": [
+        15,
+        15,
+        20
+      ],
+      "within": 0.9,
+      "cross": [
+        [
+          1,
+          2,
+          0.3
+        ]
+      ],
+      "n_tr": 100,
+      "n_val": 20,
+      "n_te": 20,
+      "beta_kind": "normal",
+      "n_nonzero": 50
+    },
+    "Dataset III": {
+      "p": 10000,
+      "groups": [
+        15,
+        15,
+        20
+      ],
+      "within": 0.9,
+      "cross": [
+        [
+          1,
+          2,
+          0.3
+        ]
+      ],
+      "n_tr": 200,
+      "n_val": 40,
+      "n_te": 40,
+      "beta_kind": "normal",
+      "n_nonzero": 50,
+      "big": true
+    },
+    "Dataset IV": {
+      "p": 10000,
+      "groups": [
+        15,
+        15,
+        20
+      ],
+      "within": 0.9,
+      "cross": [
+        [
+          1,
+          2,
+          0.3
+        ]
+      ],
+      "n_tr": 400,
+      "n_val": 80,
+      "n_te": 80,
+      "beta_kind": "normal",
+      "n_nonzero": 50,
+      "big": true
+    }
+  }
+}
