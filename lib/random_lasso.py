@@ -11,7 +11,9 @@ R 불필요(numpy + sklearn). solver.py 처럼 독립 모듈(generate_data·scor
 기본 하이퍼파라미터(논문): q1=q2=n, L=30 → B = floor(L·p/q).
 """
 import math
+import warnings
 import numpy as np
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LassoCV
 from joblib import Parallel, delayed
 
@@ -28,7 +30,10 @@ def _fit_lasso(Xsub, ysub, cv, random_state):
     """소형 LASSO 한 번: 표준화 → LassoCV(5-fold) → 원 스케일 계수."""
     Xs, ys, xnorm = _standardize(Xsub, ysub)
     m = LassoCV(cv=cv, fit_intercept=False, random_state=random_state)
-    m.fit(Xs, ys)
+    with warnings.catch_warnings():
+        # 병렬 워커 프로세스에는 노트북의 filterwarnings가 전달되지 않으므로 여기서 억제
+        warnings.simplefilter("ignore", ConvergenceWarning)
+        m.fit(Xs, ys)
     return m.coef_ / xnorm
 
 
@@ -56,9 +61,11 @@ def _bootstrap_stage(X, y, q, B, select_prob, cv, random_state, n_jobs):
     return coefs, eligible
 
 
-def _select_threshold(beta_hat, Xval, yval, n_grid=40):
-    """검증셋 예측오차(MSE)를 최소화하는 |β̂| 임계값 t*를 데이터로 선택(정답 β 미사용).
-    01/02가 λ를 검증으로 고르는 것과 동일한 원리. 반환: (t*, 후보격자, 격자별 MSE)."""
+def _select_threshold(beta_hat, Xval, yval, n_grid=40, n_se=1.0):
+    """검증셋 예측오차로 |β̂| 임계값을 데이터로 선택(정답 β 미사용).
+    표준 1-SE 규칙: 최소 MSE ± n_se×SE 안에서 가장 희소한(임계 큰) 모델을 고른다.
+    고차원(p≫n_val)에서 val-min(n_se=0)은 과다선택하므로 기본 n_se=1.
+    반환: (t*, 후보격자, 격자별 MSE)."""
     absb = np.abs(beta_hat)
     nz = absb[absb > 0]
     yval = np.asarray(yval, float).ravel()
@@ -66,13 +73,17 @@ def _select_threshold(beta_hat, Xval, yval, n_grid=40):
         return 0.0, np.array([0.0]), np.array([float(np.mean(yval ** 2))])
     cand = np.unique(np.concatenate([[0.0], np.quantile(nz, np.linspace(0, 1, n_grid))]))
     Xval = np.asarray(Xval, float)
-    mses = np.array([float(np.mean((yval - Xval @ np.where(absb >= t, beta_hat, 0.0)) ** 2))
-                     for t in cand])
-    return float(cand[mses.argmin()]), cand, mses
+    mses, ses = [], []
+    for t in cand:
+        e = (yval - Xval @ np.where(absb >= t, beta_hat, 0.0)) ** 2
+        mses.append(float(e.mean())); ses.append(float(e.std() / np.sqrt(len(e))))
+    mses = np.array(mses); ses = np.array(ses); j = int(mses.argmin())
+    ok = np.where(mses <= mses[j] + n_se * ses[j])[0]     # 최소±n_se·SE 안
+    return float(cand[ok.max()]), cand, mses               # 그 중 가장 큰 임계(가장 희소)
 
 
 def fit_random_lasso(X, y, Xval=None, yval=None, q1="auto", q2="auto", L=30,
-                     threshold=None, cv=5, random_state=0, n_jobs=-1):
+                     threshold=None, n_se=1.0, cv=5, random_state=0, n_jobs=-1):
     """Random LASSO 적합. 반환: dict(coef_, importance_, sel_freq_, n_selected, threshold_).
     threshold 선택: (Xval,yval) 주면 검증 MSE 최소로 자동(정직), 아니면 고정 threshold 사용.
     n_jobs=-1: 부트스트랩을 전체 코어로 병렬(재현성은 부트스트랩별 독립 시드로 보장)."""
@@ -98,7 +109,7 @@ def fit_random_lasso(X, y, Xval=None, yval=None, q1="auto", q2="auto", L=30,
     # 최종 선택 임계값: 검증셋이 있으면 검증 MSE 최소로 데이터 선택(정직), 없으면 고정값.
     thr_grid = thr_mse = None
     if Xval is not None and yval is not None:
-        threshold, thr_grid, thr_mse = _select_threshold(beta_hat, Xval, yval)
+        threshold, thr_grid, thr_mse = _select_threshold(beta_hat, Xval, yval, n_se=n_se)
     elif threshold is None:
         threshold = 0.0
     selected = np.abs(beta_hat) >= threshold                       # |β̂| 크기 임계 (논문 식 2.e)
