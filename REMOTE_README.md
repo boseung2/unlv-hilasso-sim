@@ -46,6 +46,20 @@ $PY run_random_lasso.py --datasets III IV --n_jobs 32
 ```
 옵션: `--n_jobs --reps --L --datasets`. 예상: III ~6분, IV ~9분.
 
+## 2C. 실행 — Hi-LASSO (논문 버전)
+
+Hi-LASSO(ElasticNet Proc1 + Adaptive Proc2 + 이항 유의성 검정). 선택 = p<0.05 검정이라
+임계값 튜닝 불필요. `run_hi_lasso.py`가 `results_hi_lasso.csv/.npz` 저장.
+
+```bash
+cd ~/boseung/unlv-hilasso-sim
+PY=/jupyterhub/jupyterhub-venv/bin/python3
+nohup $PY run_hi_lasso.py --datasets III IV --n_jobs 64 > run_hi.log 2>&1 &
+tail -f run_hi.log
+```
+옵션: `--n_jobs --reps --L --alpha --datasets`. Proc1이 ElasticNet-CV라 Random보다 무거움
+→ 예상(n_jobs=64): III ~15~25분, IV ~25~40분. I·II는 로컬에서도 빠름(수십 초~수 분).
+
 ## 3. 결과 보기
 
 - **2A(리포트)**: JupyterHub 웹 파일 브라우저에서 `03_random_lasso_report.html` 열기 → **원격에서 다 봄**(로컬 회수 불필요). 로컬에도 두고 싶으면 rsync로 회수.
