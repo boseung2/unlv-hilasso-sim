@@ -31,50 +31,54 @@ def _standardize(Xsub, ysub):
     return Xc / xstd, ysub - ysub.mean(), xstd
 
 
-def _fit_enet(Xs, ys, cv, rs):
+def _fit_enet(Xs, ys, cv, rs, max_iter=1000):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", ConvergenceWarning)
-        m = ElasticNetCV(l1_ratio=L1_GRID, cv=cv, fit_intercept=False, random_state=rs)
+        m = ElasticNetCV(l1_ratio=L1_GRID, cv=cv, fit_intercept=False,
+                         random_state=rs, max_iter=max_iter)
         m.fit(Xs, ys)
     return m.coef_
 
 
-def _fit_adaptive(Xs, ys, weights, cv, rs):
+def _fit_adaptive(Xs, ys, weights, cv, rs, max_iter=1000):
     """adaptive LASSO: 열을 1/weight로 스케일 → LASSO(1-SE) → 계수 역스케일.
     1-SE 규칙(최소 MSE + 1 SE 안에서 가장 큰 λ)로 glmnet 기본에 가깝게 성기게 뽑는다."""
     Xa = Xs / weights
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", ConvergenceWarning)
-        m = LassoCV(cv=cv, fit_intercept=False, random_state=rs)
+        m = LassoCV(cv=cv, fit_intercept=False, random_state=rs, max_iter=max_iter)
         m.fit(Xa, ys)
         mse = m.mse_path_.mean(axis=1)
         se = m.mse_path_.std(axis=1) / np.sqrt(m.mse_path_.shape[1])
         imin = int(np.argmin(mse))
         ok = np.where(mse <= mse[imin] + se[imin])[0]
         alpha = m.alphas_[ok[0]] if len(ok) else m.alpha_   # alphas_ 내림차순 → 가장 큰 λ
-        m = Lasso(alpha=alpha, fit_intercept=False)
+        m = Lasso(alpha=alpha, fit_intercept=False, max_iter=max_iter)
         m.fit(Xa, ys)
     return m.coef_ / weights
 
 
-def _one_bootstrap(b, X, y, q, select_prob, mode, penalty_weights, cv, random_state):
+def _one_bootstrap(b, X, y, q, select_prob, mode, penalty_weights, cv, random_state,
+                   max_iter=1000):
     rng = np.random.default_rng([random_state, b])
     n, p = X.shape
     rows = rng.integers(0, n, size=n)
     cols = rng.choice(p, size=q, replace=False, p=select_prob)
     Xs, ys, xstd = _standardize(X[rows][:, cols], y[rows])
     if mode == "procedure1":
-        coef = _fit_enet(Xs, ys, cv, random_state)
+        coef = _fit_enet(Xs, ys, cv, random_state, max_iter)
     else:
-        coef = _fit_adaptive(Xs, ys, penalty_weights[cols], cv, random_state)
+        coef = _fit_adaptive(Xs, ys, penalty_weights[cols], cv, random_state, max_iter)
     beta = np.full(p, np.nan)                     # ① 미선택 = NaN (편향 교정)
     beta[cols] = coef / xstd
     return beta
 
 
-def _bootstrap_stage(X, y, q, B, select_prob, mode, penalty_weights, cv, random_state, n_jobs):
+def _bootstrap_stage(X, y, q, B, select_prob, mode, penalty_weights, cv, random_state,
+                     n_jobs, max_iter=1000):
     results = Parallel(n_jobs=n_jobs, prefer="processes")(
-        delayed(_one_bootstrap)(b, X, y, q, select_prob, mode, penalty_weights, cv, random_state)
+        delayed(_one_bootstrap)(b, X, y, q, select_prob, mode, penalty_weights, cv,
+                                random_state, max_iter)
         for b in range(B))
     betas = np.full((X.shape[1], B), np.nan)
     for b, beta in enumerate(results):
@@ -83,7 +87,7 @@ def _bootstrap_stage(X, y, q, B, select_prob, mode, penalty_weights, cv, random_
 
 
 def fit_hi_lasso(X, y, q1="auto", q2="auto", L=30, alpha=0.05,
-                 correction="bonferroni", cv=5, random_state=0, n_jobs=-1):
+                 correction="bonferroni", cv=5, random_state=0, n_jobs=-1, max_iter=1000):
     """Hi-LASSO 적합. 반환: dict(coef_, beta_hat_, importance_, p_values_, n_selected).
     선택 = 이항 유의성 검정 — 임계값 튜닝 불필요.
       q="auto" → n//2 (부분문제를 잘 정의: 표본>변수 → LASSO 성김).
@@ -95,7 +99,8 @@ def fit_hi_lasso(X, y, q1="auto", q2="auto", L=30, alpha=0.05,
 
     # Procedure 1 — 중요도 (ElasticNet, 균등 선택)
     B1 = math.floor(L * p / q1)
-    b1 = _bootstrap_stage(X, y, q1, B1, None, "procedure1", None, cv, random_state, n_jobs)
+    b1 = _bootstrap_stage(X, y, q1, B1, None, "procedure1", None, cv, random_state,
+                          n_jobs, max_iter)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)     # all-NaN 행 경고 억제
         b1_mean = np.nanmean(np.abs(b1), axis=1)            # ② nanmean(|coef|)
@@ -106,7 +111,7 @@ def fit_hi_lasso(X, y, q1="auto", q2="auto", L=30, alpha=0.05,
     # Procedure 2 — 계수 + 검정 (Adaptive LASSO, 가중 선택)
     B2 = math.floor(L * p / q2)
     b2 = _bootstrap_stage(X, y, q2, B2, select_prob, "procedure2", penalty_weights,
-                          cv, random_state, n_jobs)
+                          cv, random_state, n_jobs, max_iter)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         b2_mean = np.nan_to_num(np.nanmean(b2, axis=1))     # 평균 계수 (미선택 0)
@@ -124,8 +129,11 @@ def fit_hi_lasso(X, y, q1="auto", q2="auto", L=30, alpha=0.05,
     selected = _select_significant(p_values, alpha, correction)
     coef_ = np.where(selected, b2_mean, 0.0)
 
+    # t_/s_/pi_ 노출: 조교님식 유전자별 이항검정(binom.sf(s, n=t, p=pi)) 재계산용.
+    #   t_=변수별 부트스트랩 등장수, s_=nonzero 추정 횟수, pi_=전체 평균 선택률.
     return dict(coef_=coef_, beta_hat_=b2_mean, importance_=importance,
-                p_values_=p_values, n_selected=int((coef_ != 0).sum()))
+                p_values_=p_values, n_selected=int((coef_ != 0).sum()),
+                t_=n_j, s_=d, pi_=pi)
 
 
 def _select_significant(p_values, alpha, correction):
